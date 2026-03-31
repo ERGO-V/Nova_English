@@ -1,0 +1,30 @@
+name: novaenglish
+description: "NovaEnglish - Flutter vocabulary trainer for Android and Web."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.5
+  sqflite: ^2.4.2
+  sqflite_common_ffi_web: ^1.0.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  image_picker: ^1.2.0
+  file_picker: ^10.3.3
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/data/builtin_words.json
+    - assets/data/oxford_words.json
