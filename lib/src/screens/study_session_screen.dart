@@ -47,7 +47,6 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   int _totalSeen = 0;
   int _correctCount = 0;
   int _wrongCount = 0;
-  int _initialCount = 0;
   final Map<String, int> _wrongWords = <String, int>{};
 
   StudyEntry get _current => _queue.first;
@@ -73,7 +72,6 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
 
     setState(() {
       _queue = entries;
-      _initialCount = entries.length;
       _loading = false;
       _emptyMessage = entries.isEmpty
           ? (widget.isCustom ? '这个单元还没有可学习的单词。' : '当前没有符合条件的单词。')

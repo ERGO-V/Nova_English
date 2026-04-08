@@ -1,0 +1,150 @@
+diff --git a/packages/flutter_tools/lib/src/web/chrome.dart b/packages/flutter_tools/lib/src/web/chrome.dart
+index 78e1c8a2bd2..b34e4b28d63 100644
+--- a/packages/flutter_tools/lib/src/web/chrome.dart
++++ b/packages/flutter_tools/lib/src/web/chrome.dart
+@@ -7,7 +7,8 @@ import 'dart:async';
+ import 'package:collection/collection.dart';
+ import 'package:meta/meta.dart';
+ import 'package:process/process.dart';
+-import 'package:webkit_inspection_protocol/webkit_inspection_protocol.dart' hide StackTrace;
++import 'package:webkit_inspection_protocol/webkit_inspection_protocol.dart'
++    hide StackTrace;
+ 
+ import '../base/async_guard.dart';
+ import '../base/common.dart';
+@@ -28,7 +29,8 @@ const kEdgeEnvironment = 'EDGE_ENVIRONMENT';
+ const kLinuxExecutable = 'google-chrome';
+ 
+ /// The expected executable name on macOS.
+-const kMacOSExecutable = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
++const kMacOSExecutable =
++    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+ 
+ /// The expected Chrome executable name on Windows.
+ const kWindowsExecutable = r'Google\Chrome\Application\chrome.exe';
+@@ -66,8 +68,10 @@ String findChromeExecutable(Platform platform, FileSystem fileSystem) {
+   if (platform.isWindows) {
+     /// The possible locations where the chrome executable can be located on windows.
+     final kWindowsPrefixes = <String>[
+-      if (platform.environment.containsKey('LOCALAPPDATA')) platform.environment['LOCALAPPDATA']!,
+-      if (platform.environment.containsKey('PROGRAMFILES')) platform.environment['PROGRAMFILES']!,
++      if (platform.environment.containsKey('LOCALAPPDATA'))
++        platform.environment['LOCALAPPDATA']!,
++      if (platform.environment.containsKey('PROGRAMFILES'))
++        platform.environment['PROGRAMFILES']!,
+       if (platform.environment.containsKey('PROGRAMFILES(X86)'))
+         platform.environment['PROGRAMFILES(X86)']!,
+     ];
+@@ -90,8 +94,10 @@ String findEdgeExecutable(Platform platform, FileSystem fileSystem) {
+   if (platform.isWindows) {
+     /// The possible locations where the Edge executable can be located on windows.
+     final kWindowsPrefixes = <String>[
+-      if (platform.environment.containsKey('LOCALAPPDATA')) platform.environment['LOCALAPPDATA']!,
+-      if (platform.environment.containsKey('PROGRAMFILES')) platform.environment['PROGRAMFILES']!,
++      if (platform.environment.containsKey('LOCALAPPDATA'))
++        platform.environment['LOCALAPPDATA']!,
++      if (platform.environment.containsKey('PROGRAMFILES'))
++        platform.environment['PROGRAMFILES']!,
+       if (platform.environment.containsKey('PROGRAMFILES(X86)'))
+         platform.environment['PROGRAMFILES(X86)']!,
+     ];
+@@ -163,12 +169,16 @@ class ChromiumLauncher {
+       );
+ 
+       if (userDataDirFlag != null) {
+-        final Directory userDataDir = _fileSystem.directory(userDataDirFlag.split('=')[1]);
++        final Directory userDataDir = _fileSystem.directory(
++          userDataDirFlag.split('=')[1],
++        );
+         webBrowserFlags.remove(userDataDirFlag);
+         return userDataDir;
+       }
+     }
+-    return _fileSystem.systemTempDirectory.createTempSync('flutter_tools_chrome_device.');
++    return _fileSystem.systemTempDirectory.createTempSync(
++      'flutter_tools_chrome_device.',
++    );
+   }
+ 
+   /// Launch a Chromium browser to a particular `host` page.
+@@ -240,6 +250,7 @@ class ChromiumLauncher {
+       '--no-default-browser-check',
+       '--disable-default-apps',
+       '--disable-translate',
++      '--disable-web-security',
+ 
+       // Remove the search engine choice screen. It's irrelevant for app
+       // debugging purposes.
+@@ -285,9 +296,15 @@ class ChromiumLauncher {
+     );
+   }
+ 
+-  Future<Process> _spawnChromiumProcess(List<String> args, String chromeExecutable) async {
++  Future<Process> _spawnChromiumProcess(
++    List<String> args,
++    String chromeExecutable,
++  ) async {
+     if (_operatingSystemUtils.hostPlatform == HostPlatform.darwin_arm64) {
+-      final ProcessResult result = _processManager.runSync(<String>['file', chromeExecutable]);
++      final ProcessResult result = _processManager.runSync(<String>[
++        'file',
++        chromeExecutable,
++      ]);
+       // Check if ARM Chrome is installed.
+       // Mach-O 64-bit executable arm64
+       if ((result.stdout as String).contains('arm64')) {
+@@ -381,7 +398,8 @@ class ChromiumLauncher {
+ 
+   // This is a JSON file which contains configuration from the browser session,
+   // such as window position. It is located under the Chrome data-dir folder.
+-  String get _preferencesPath => _fileSystem.path.join('Default', 'preferences');
++  String get _preferencesPath =>
++      _fileSystem.path.join('Default', 'preferences');
+ 
+   /// Copy Chrome user information from a Chrome session into a per-project
+   /// cache.
+@@ -436,7 +454,10 @@ class ChromiumLauncher {
+ 
+   /// Restore Chrome user information from a per-project cache into Chrome's
+   /// user data directory.
+-  void _restoreUserSessionInformation(Directory cacheDir, Directory userDataDir) {
++  void _restoreUserSessionInformation(
++    Directory cacheDir,
++    Directory userDataDir,
++  ) {
+     final Directory sourceChromeDefault = _fileSystem.directory(
+       _fileSystem.path.join(cacheDir.path, _chromeDefaultPath),
+     );
+@@ -476,7 +497,9 @@ class ChromiumLauncher {
+       } on Exception catch (error, stackTrace) {
+         _logger.printError('$error', stackTrace: stackTrace);
+         await chrome.close();
+-        throwToolExit('Unable to connect to Chrome debug port: ${chrome.debugPort}\n $error');
++        throwToolExit(
++          'Unable to connect to Chrome debug port: ${chrome.debugPort}\n $error',
++        );
+       }
+     }
+     currentCompleter.complete(chrome);
+@@ -532,7 +555,9 @@ class Chromium {
+ 
+     for (var i = 1; i <= attempts; i++) {
+       try {
+-        final List<ChromeTab> tabs = await chromeConnection.getTabs(retryFor: retryFor);
++        final List<ChromeTab> tabs = await chromeConnection.getTabs(
++          retryFor: retryFor,
++        );
+ 
+         if (tabs.isNotEmpty) {
+           _hasValidChromeConnection = true;
+@@ -636,7 +661,9 @@ Future<ChromeTab?> getChromeTabGuarded(
+   void Function(Object error, StackTrace stackTrace)? onIoError,
+ }) async {
+   try {
+-    return await asyncGuard(() => chromeConnection.getTab(accept, retryFor: retryFor));
++    return await asyncGuard(
++      () => chromeConnection.getTab(accept, retryFor: retryFor),
++    );
+   } on IOException catch (error, stackTrace) {
+     if (onIoError != null) {
+       onIoError(error, stackTrace);
