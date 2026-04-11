@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/entities.dart';
 import '../services/nova_controller.dart';
+import '../theme/nova_theme.dart';
 import 'settings_screen.dart';
 import 'study_session_screen.dart';
 
@@ -13,6 +14,8 @@ class StudyTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<NovaController>();
     final stats = controller.studyStats;
+    final palette = context.novaColors;
+    final isLight = Theme.of(context).brightness == Brightness.light;
 
     return Scaffold(
       appBar: AppBar(
@@ -32,7 +35,7 @@ class StudyTab extends StatelessWidget {
             },
             child: CircleAvatar(
               backgroundImage: controller.avatarProvider(),
-              backgroundColor: const Color(0xFF183249),
+              backgroundColor: palette.avatarBackground,
               child: controller.avatarProvider() == null
                   ? const Icon(Icons.person_outline)
                   : null,
@@ -47,8 +50,22 @@ class StudyTab extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF10273F), Color(0xFF0D1824)],
+              border: Border.all(
+                color: isLight
+                    ? const Color(0xFFF3E7DB)
+                    : Colors.white.withValues(alpha: 0.04),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: isLight
+                      ? const Color(0x221E140C)
+                      : Colors.black.withValues(alpha: 0.16),
+                  blurRadius: isLight ? 18 : 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              gradient: LinearGradient(
+                colors: [palette.heroGradientStart, palette.heroGradientEnd],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -111,7 +128,7 @@ class StudyTab extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF121E2D),
+              color: palette.surface,
               borderRadius: BorderRadius.circular(28),
             ),
             child: Column(
@@ -134,7 +151,7 @@ class StudyTab extends StatelessWidget {
                   value: stats.completionRatio,
                   minHeight: 10,
                   borderRadius: BorderRadius.circular(999),
-                  backgroundColor: const Color(0xFF203243),
+                  backgroundColor: palette.progressTrack,
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -200,12 +217,14 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.novaColors;
+
     return SizedBox(
       width: 160,
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: const Color(0xFF121E2D),
+          color: palette.surface,
           borderRadius: BorderRadius.circular(24),
         ),
         child: Column(

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/entities.dart';
 import '../services/nova_controller.dart';
 import '../services/nova_repository.dart';
+import '../theme/nova_theme.dart';
 
 class UnitEditorScreen extends StatefulWidget {
   const UnitEditorScreen({
@@ -43,6 +44,8 @@ class _UnitEditorScreenState extends State<UnitEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.novaColors;
+
     return Scaffold(
       appBar: AppBar(
         title: Text('编辑 ${widget.unitName}'),
@@ -69,7 +72,7 @@ class _UnitEditorScreenState extends State<UnitEditorScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF121E2D),
+                    color: palette.surface,
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Row(

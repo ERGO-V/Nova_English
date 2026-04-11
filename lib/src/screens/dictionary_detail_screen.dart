@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/entities.dart';
 import '../services/nova_controller.dart';
+import '../theme/nova_theme.dart';
 import 'study_session_screen.dart';
 import 'unit_editor_screen.dart';
 
@@ -45,6 +46,8 @@ class _DictionaryDetailScreenState extends State<DictionaryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.novaColors;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.dictionaryName)),
       floatingActionButton: FloatingActionButton.extended(
@@ -75,7 +78,7 @@ class _DictionaryDetailScreenState extends State<DictionaryDetailScreen> {
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF121E2D),
+                  color: palette.surface,
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Column(

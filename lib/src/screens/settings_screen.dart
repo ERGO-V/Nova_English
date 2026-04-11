@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../services/nova_controller.dart';
+import '../theme/nova_theme.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -30,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<NovaController>();
+    final palette = context.novaColors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
@@ -39,7 +41,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF121E2D),
+              color: palette.surface,
               borderRadius: BorderRadius.circular(28),
             ),
             child: Column(
@@ -47,7 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 CircleAvatar(
                   radius: 42,
                   backgroundImage: controller.avatarProvider(),
-                  backgroundColor: const Color(0xFF183249),
+                  backgroundColor: palette.avatarBackground,
                   child: controller.avatarProvider() == null
                       ? const Icon(Icons.person_outline, size: 36)
                       : null,
@@ -125,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ListTile(
                 leading: const Icon(Icons.download_outlined),
                 title: const Text('导入完整备份'),
-                subtitle: const Text('会按备份内容合并内置学习进度和自定义词典数据'),
+                subtitle: const Text('会合并备份内容，并恢复内置学习进度和自定义词典'),
                 onTap: () async {
                   final confirmed = await _showConfirmDialog(
                     title: '导入完整备份',
@@ -191,14 +193,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 18),
           _SettingGroup(
-            title: '扩展',
-            children: const [
-              ListTile(
-                leading: Icon(Icons.palette_outlined),
-                title: Text('主题切换'),
-                subtitle: Text('已预留，当前提供深色主题'),
+            title: '显示',
+            children: [
+              SwitchListTile.adaptive(
+                secondary: const Icon(Icons.light_mode_outlined),
+                title: const Text('浅色主题'),
+                subtitle: const Text('柔和米白与灰蓝配色，减少眩光'),
+                value: controller.prefersLightTheme,
+                onChanged: context.read<NovaController>().setPrefersLightTheme,
               ),
-              ListTile(
+              const ListTile(
                 leading: Icon(Icons.info_outline),
                 title: Text('关于'),
                 subtitle: Text('NovaEnglish 本地背词应用'),
@@ -242,9 +246,11 @@ class _SettingGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.novaColors;
+
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF121E2D),
+        color: palette.surface,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(

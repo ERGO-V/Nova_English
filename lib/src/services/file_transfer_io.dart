@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -33,6 +34,20 @@ class IoFileTransferService implements FileTransferService {
     required String suggestedName,
     required String content,
   }) async {
+    if (Platform.isAndroid) {
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: '选择导出位置',
+        fileName: suggestedName,
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        bytes: Uint8List.fromList(utf8.encode(content)),
+      );
+      if (savedPath != null && savedPath.isNotEmpty) {
+        return '已导出到 $savedPath';
+      }
+      return '已取消导出';
+    }
+
     final directory = await getApplicationDocumentsDirectory();
     final file = File(p.join(directory.path, suggestedName));
     await file.writeAsString(content, flush: true);

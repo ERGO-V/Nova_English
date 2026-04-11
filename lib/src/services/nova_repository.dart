@@ -11,6 +11,7 @@ class NovaRepository {
   static const int _databaseVersion = 2;
   static const String _seedDataVersionKey = 'seed_data_version';
   static const String _seedDataVersion = '20260328_common_lookup_v2';
+  static const String _prefersLightThemeKey = 'prefers_light_theme';
 
   Database? _database;
 
@@ -331,6 +332,15 @@ class NovaRepository {
       'id': 1,
       ...profile.toMap(),
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<bool> fetchPrefersLightTheme() async {
+    final value = await _getMetaValue(_prefersLightThemeKey);
+    return value == '1';
+  }
+
+  Future<void> savePrefersLightTheme(bool value) async {
+    await _setMetaValue(db, _prefersLightThemeKey, value ? '1' : '0');
   }
 
   Future<BuiltinStats> fetchBuiltinStats(BuiltinSource source) async {

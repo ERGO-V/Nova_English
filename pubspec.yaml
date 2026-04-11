@@ -29,3 +29,9 @@ flutter:
   assets:
     - assets/data/builtin_words.json
     - assets/data/oxford_words.json
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3

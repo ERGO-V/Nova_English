@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/nova_controller.dart';
+import '../theme/nova_theme.dart';
 import 'dictionary_detail_screen.dart';
 
 class CustomDictionariesTab extends StatelessWidget {
@@ -10,6 +11,7 @@ class CustomDictionariesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<NovaController>();
+    final palette = context.novaColors;
 
     return Scaffold(
       appBar: AppBar(title: const Text('我的词典')),
@@ -28,7 +30,7 @@ class CustomDictionariesTab extends StatelessWidget {
                 final item = controller.customDictionaries[index];
                 return Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF121E2D),
+                    color: palette.surface,
                     borderRadius: BorderRadius.circular(24),
                   ),
                   child: ListTile(

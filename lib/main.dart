@@ -16,6 +16,7 @@ Future<void> main() async {
 
   final repository = NovaRepository();
   final controller = NovaController(repository);
+  await controller.initialize();
 
   runApp(
     ChangeNotifierProvider.value(

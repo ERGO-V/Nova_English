@@ -20,6 +20,7 @@ class NovaController extends ChangeNotifier {
   bool isBusy = false;
   String? initError;
   int tabIndex = 0;
+  bool prefersLightTheme = false;
   BuiltinSource selectedSource = BuiltinSource.cet4;
   UserProfile profile = const UserProfile(nickname: 'Nova Learner');
   BuiltinStats studyStats = const BuiltinStats(
@@ -40,6 +41,7 @@ class NovaController extends ChangeNotifier {
 
     try {
       await repository.init();
+      prefersLightTheme = await repository.fetchPrefersLightTheme();
       profile = await repository.fetchProfile();
       studyStats = await repository.fetchBuiltinStats(selectedSource);
       customDictionaries = await repository.fetchCustomDictionaries();
@@ -54,9 +56,22 @@ class NovaController extends ChangeNotifier {
   }
 
   Future<void> refreshAll() async {
+    prefersLightTheme = await repository.fetchPrefersLightTheme();
     studyStats = await repository.fetchBuiltinStats(selectedSource);
     customDictionaries = await repository.fetchCustomDictionaries();
     profile = await repository.fetchProfile();
+    notifyListeners();
+  }
+
+  ThemeMode get themeMode =>
+      prefersLightTheme ? ThemeMode.light : ThemeMode.dark;
+
+  Future<void> setPrefersLightTheme(bool value) async {
+    if (prefersLightTheme == value) {
+      return;
+    }
+    prefersLightTheme = value;
+    await repository.savePrefersLightTheme(value);
     notifyListeners();
   }
 

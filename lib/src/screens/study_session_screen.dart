@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/entities.dart';
 import '../services/nova_controller.dart';
+import '../theme/nova_theme.dart';
 
 class StudySessionScreen extends StatefulWidget {
   const StudySessionScreen.builtin({
@@ -104,6 +105,8 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   }
 
   Widget _buildSession(BuildContext context) {
+    final palette = context.novaColors;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -121,7 +124,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F1723),
+            color: palette.surfaceMuted,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Text(_revealed ? '选择无误后再确认，错题会重新插回本轮队列。' : '先判断自己是否认识，再查看释义。'),
@@ -133,8 +136,8 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(32),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF12273E), Color(0xFF0D1824)],
+              gradient: LinearGradient(
+                colors: [palette.heroGradientStart, palette.heroGradientEnd],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -202,6 +205,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
   }
 
   Widget _buildSummary(BuildContext context) {
+    final palette = context.novaColors;
     final topWrong = _wrongWords.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
@@ -210,7 +214,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF121E2D),
+            color: palette.surface,
             borderRadius: BorderRadius.circular(28),
           ),
           child: Column(
@@ -306,10 +310,12 @@ class _MiniChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.novaColors;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF132130),
+        color: palette.chipBackground,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label),
