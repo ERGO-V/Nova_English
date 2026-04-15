@@ -8,8 +8,21 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/entities.dart';
 
+typedef ImportProgressCallback = void Function(ImportProgress update);
+
+class ImportProgress {
+  const ImportProgress({
+    required this.progress,
+    required this.message,
+  });
+
+  final double progress;
+  final String message;
+}
+
 class NovaRepository {
   static const int _databaseVersion = 2;
+  static const int _batchChunkSize = 500;
   static const String _seedDataVersionKey = 'seed_data_version';
   static const String _seedDataVersion = '20260328_common_lookup_v2';
   static const String _prefersLightThemeKey = 'prefers_light_theme';
@@ -810,13 +823,18 @@ class NovaRepository {
     return const JsonEncoder.withIndent('  ').convert(payload);
   }
 
-  Future<void> importFullBackupJsonString(String rawJson) async {
+  Future<void> importFullBackupJsonString(
+    String rawJson, {
+    ImportProgressCallback? onProgress,
+  }) async {
+    _emitImportProgress(onProgress, 0.02, '正在解析完整备份...');
     final decoded = _decodeBackupJson(rawJson);
     final profile = decoded['profile'] as Map<String, dynamic>?;
     final builtinProgress = _normalizeMapList(decoded['builtin_progress']);
     final customDicts = _normalizeMapList(decoded['custom_dicts']);
     final units = _normalizeMapList(decoded['units']);
     final customWords = _normalizeMapList(decoded['custom_words']);
+    _emitImportProgress(onProgress, 0.10, '备份解析完成，准备写入数据库...');
 
     await _runSerializedWrite(() async {
       await db.transaction((txn) async {
@@ -826,55 +844,55 @@ class NovaRepository {
             ...profile,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
+        _emitImportProgress(onProgress, 0.16, '正在写入账户信息...');
 
-        final builtinIdMap = await _loadBuiltinIdMap(txn);
-        final builtinIdSet = builtinIdMap.values.toSet();
-        for (final progress in builtinProgress) {
-          final targetWordId = _resolveBuiltinWordId(
-            progress,
-            builtinIdMap,
-            builtinIdSet,
-          );
-          if (targetWordId == null) {
-            continue;
-          }
-          await txn.insert('learning_progress', {
-            'word_id': targetWordId,
-            'word_type': progress['word_type'] ?? WordType.builtin.key,
-            'error_count': progress['error_count'] ?? 0,
-            'last_review_time': progress['last_review_time'] ?? 0,
-            'next_review_time': progress['next_review_time'] ?? 0,
-            'consecutive_correct': progress['consecutive_correct'] ?? 0,
-            'is_removed': progress['is_removed'] ?? 0,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
+        await _importBuiltinProgressFast(
+          txn: txn,
+          builtinProgress: builtinProgress,
+          onProgress: onProgress,
+          startProgress: 0.18,
+          endProgress: 0.56,
+        );
 
-        await _replaceCustomDictionaryBundle(
+        await _replaceCustomDictionaryBundleFast(
           txn,
           customDicts: customDicts,
           units: units,
           customWords: customWords,
+          onProgress: onProgress,
+          startProgress: 0.56,
+          endProgress: 0.96,
         );
       });
     });
+    _emitImportProgress(onProgress, 1.0, '完整备份导入完成');
   }
 
-  Future<void> importCustomDictionaryJsonString(String rawJson) async {
+  Future<void> importCustomDictionaryJsonString(
+    String rawJson, {
+    ImportProgressCallback? onProgress,
+  }) async {
+    _emitImportProgress(onProgress, 0.02, '正在解析自定义词典...');
     final decoded = _decodeBackupJson(rawJson);
     final customDicts = _normalizeMapList(decoded['custom_dicts']);
     final units = _normalizeMapList(decoded['units']);
     final customWords = _normalizeMapList(decoded['custom_words']);
+    _emitImportProgress(onProgress, 0.10, '词典解析完成，准备写入数据库...');
 
     await _runSerializedWrite(() async {
       await db.transaction((txn) async {
-        await _mergeCustomDictionaryBundle(
+        await _mergeCustomDictionaryBundleFast(
           txn,
           customDicts: customDicts,
           units: units,
           customWords: customWords,
+          onProgress: onProgress,
+          startProgress: 0.12,
+          endProgress: 0.96,
         );
       });
     });
+    _emitImportProgress(onProgress, 1.0, '自定义词典导入完成');
   }
 
   Future<String> exportJsonString() => exportFullBackupJsonString();
@@ -911,6 +929,7 @@ class NovaRepository {
     };
   }
 
+  // ignore: unused_element
   Future<void> _replaceCustomDictionaryBundle(
     Transaction txn, {
     required List<Map<String, dynamic>> customDicts,
@@ -966,6 +985,7 @@ class NovaRepository {
     }
   }
 
+  // ignore: unused_element
   Future<void> _mergeCustomDictionaryBundle(
     Transaction txn, {
     required List<Map<String, dynamic>> customDicts,
@@ -1061,6 +1081,504 @@ class NovaRepository {
         );
       }
     }
+  }
+
+  Future<void> _importBuiltinProgressFast({
+    required Transaction txn,
+    required List<Map<String, dynamic>> builtinProgress,
+    ImportProgressCallback? onProgress,
+    double startProgress = 0,
+    double endProgress = 1,
+  }) async {
+    final builtinIdMap = await _loadBuiltinIdMap(txn);
+    final builtinIdSet = builtinIdMap.values.toSet();
+    Batch batch = txn.batch();
+    var queued = 0;
+    var processed = 0;
+    _emitImportProgress(onProgress, startProgress, '正在导入内置学习进度...');
+
+    Future<void> flush() async {
+      if (queued == 0) {
+        return;
+      }
+      await batch.commit(noResult: true);
+      processed += queued;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(startProgress, endProgress, processed, builtinProgress.length),
+        '正在导入内置学习进度...',
+      );
+      batch = txn.batch();
+      queued = 0;
+    }
+
+    for (final progress in builtinProgress) {
+      final targetWordId = _resolveBuiltinWordId(
+        progress,
+        builtinIdMap,
+        builtinIdSet,
+      );
+      if (targetWordId == null) {
+        continue;
+      }
+      batch.insert('learning_progress', {
+        'word_id': targetWordId,
+        'word_type': progress['word_type'] ?? WordType.builtin.key,
+        'error_count': progress['error_count'] ?? 0,
+        'last_review_time': progress['last_review_time'] ?? 0,
+        'next_review_time': progress['next_review_time'] ?? 0,
+        'consecutive_correct': progress['consecutive_correct'] ?? 0,
+        'is_removed': progress['is_removed'] ?? 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      queued++;
+      if (queued >= _batchChunkSize) {
+        await flush();
+      }
+    }
+
+    await flush();
+  }
+
+  Future<void> _replaceCustomDictionaryBundleFast(
+    Transaction txn, {
+    required List<Map<String, dynamic>> customDicts,
+    required List<Map<String, dynamic>> units,
+    required List<Map<String, dynamic>> customWords,
+    ImportProgressCallback? onProgress,
+    double startProgress = 0,
+    double endProgress = 1,
+  }) async {
+    final dictionaryIdMap = <int, int>{};
+    final unitIdMap = <int, int>{};
+    final dictionaryEnd = _lerpProgress(startProgress, endProgress, 0.20);
+    final unitEnd = _lerpProgress(startProgress, endProgress, 0.45);
+    final wordEnd = _lerpProgress(startProgress, endProgress, 1.0);
+    _emitImportProgress(onProgress, startProgress, '正在替换自定义词典...');
+    final existingDictionaryRows = await txn.query(
+      'custom_dict',
+      columns: ['id', 'name'],
+    );
+    final existingDictionaryIdsByName = <String, List<int>>{};
+    for (final row in existingDictionaryRows) {
+      final name = row['name'] as String? ?? '';
+      final id = row['id'] as int?;
+      if (name.isEmpty || id == null) {
+        continue;
+      }
+      existingDictionaryIdsByName.putIfAbsent(name, () => <int>[]).add(id);
+    }
+
+    for (final dictionary in customDicts) {
+      final name = _sanitizeImportedDictionaryName(dictionary['name']);
+      final existingIds = existingDictionaryIdsByName[name] ?? const <int>[];
+      for (final existingId in existingIds) {
+        await txn.delete(
+          'custom_dict',
+          where: 'id = ?',
+          whereArgs: [existingId],
+        );
+      }
+      final newId = await txn.insert('custom_dict', {'name': name});
+      final oldId = (dictionary['id'] as num?)?.toInt() ?? newId;
+      dictionaryIdMap[oldId] = newId;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(startProgress, dictionaryEnd, dictionaryIdMap.length, customDicts.length),
+        '正在替换词典列表...',
+      );
+    }
+
+    if (customDicts.isEmpty) {
+      _emitImportProgress(onProgress, dictionaryEnd, '词典列表处理完成');
+    }
+
+    final unitRows = <Map<String, Object?>>[];
+    final unitOldIds = <int>[];
+    for (final unit in units) {
+      final oldDictId = (unit['dict_id'] as num?)?.toInt();
+      if (oldDictId == null) {
+        continue;
+      }
+      final mappedDictId = dictionaryIdMap[oldDictId];
+      if (mappedDictId == null) {
+        continue;
+      }
+      unitRows.add({
+        'dict_id': mappedDictId,
+        'name': _sanitizeImportedUnitName(unit['name']),
+      });
+      unitOldIds.add((unit['id'] as num?)?.toInt() ?? -1);
+    }
+
+    if (unitRows.isNotEmpty) {
+      final batch = txn.batch();
+      for (final row in unitRows) {
+        batch.insert('unit', row);
+      }
+      final results = await batch.commit();
+      for (var index = 0; index < results.length; index++) {
+        final newId = results[index] as int;
+        final oldUnitId = unitOldIds[index] == -1 ? newId : unitOldIds[index];
+        unitIdMap[oldUnitId] = newId;
+      }
+    }
+    _emitImportProgress(
+      onProgress,
+      unitEnd,
+      unitRows.isEmpty ? '没有需要导入的单元' : '单元写入完成',
+    );
+
+    final wordRows = <Map<String, Object?>>[];
+    for (final word in customWords) {
+      final oldUnitId = (word['unit_id'] as num?)?.toInt();
+      if (oldUnitId == null) {
+        continue;
+      }
+      final mappedUnitId = unitIdMap[oldUnitId];
+      if (mappedUnitId == null) {
+        continue;
+      }
+
+      final rawWord = (word['word'] as String? ?? '').trim();
+      final rawMeaning = (word['meaning'] as String? ?? '').trim();
+      if (rawWord.isEmpty || rawMeaning.isEmpty) {
+        continue;
+      }
+
+      wordRows.add({
+        'unit_id': mappedUnitId,
+        'word': rawWord,
+        'meaning': rawMeaning,
+      });
+    }
+
+    await _commitInsertChunked(
+      txn,
+      table: 'custom_word',
+      rows: wordRows,
+      onProgress: onProgress,
+      startProgress: unitEnd,
+      endProgress: wordEnd,
+      progressMessage: '正在导入自定义单词...',
+    );
+  }
+
+  Future<void> _mergeCustomDictionaryBundleFast(
+    Transaction txn, {
+    required List<Map<String, dynamic>> customDicts,
+    required List<Map<String, dynamic>> units,
+    required List<Map<String, dynamic>> customWords,
+    ImportProgressCallback? onProgress,
+    double startProgress = 0,
+    double endProgress = 1,
+  }) async {
+    final dictionaryIdMap = <int, int>{};
+    final unitIdMap = <int, int>{};
+    final dictionaryEnd = _lerpProgress(startProgress, endProgress, 0.18);
+    final unitEnd = _lerpProgress(startProgress, endProgress, 0.40);
+    final insertEnd = _lerpProgress(startProgress, endProgress, 0.82);
+    final updateEnd = _lerpProgress(startProgress, endProgress, 1.0);
+    _emitImportProgress(onProgress, startProgress, '正在合并自定义词典...');
+    final existingDictionaryRows = await txn.query(
+      'custom_dict',
+      columns: ['id', 'name'],
+    );
+    final existingDictionaryIdByName = <String, int>{
+      for (final row in existingDictionaryRows)
+        if (row['id'] is int && row['name'] is String)
+          row['name'] as String: row['id'] as int,
+    };
+
+    for (final dictionary in customDicts) {
+      final name = _sanitizeImportedDictionaryName(dictionary['name']);
+      if (name.isEmpty) {
+        continue;
+      }
+      final existingId = existingDictionaryIdByName[name];
+      final newId = existingId ?? await txn.insert('custom_dict', {'name': name});
+      existingDictionaryIdByName[name] = newId;
+      final oldId = (dictionary['id'] as num?)?.toInt() ?? newId;
+      dictionaryIdMap[oldId] = newId;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(startProgress, dictionaryEnd, dictionaryIdMap.length, customDicts.length),
+        '正在匹配词典...',
+      );
+    }
+
+    if (customDicts.isEmpty) {
+      _emitImportProgress(onProgress, dictionaryEnd, '词典匹配完成');
+    }
+
+    final existingUnitRows = await txn.query(
+      'unit',
+      columns: ['id', 'dict_id', 'name'],
+    );
+    final existingUnitIdByKey = <String, int>{
+      for (final row in existingUnitRows)
+        if (row['id'] is int && row['dict_id'] is int && row['name'] is String)
+          _customUnitKey(
+            dictId: row['dict_id'] as int,
+            name: row['name'] as String,
+          ): row['id'] as int,
+    };
+
+    for (final unit in units) {
+      final oldDictId = (unit['dict_id'] as num?)?.toInt();
+      if (oldDictId == null) {
+        continue;
+      }
+      final mappedDictId = dictionaryIdMap[oldDictId];
+      if (mappedDictId == null) {
+        continue;
+      }
+
+      final name = _sanitizeImportedUnitName(unit['name']);
+      if (name.isEmpty) {
+        continue;
+      }
+
+      final key = _customUnitKey(dictId: mappedDictId, name: name);
+      final existingId = existingUnitIdByKey[key];
+      final newId =
+          existingId ??
+          await txn.insert('unit', {'dict_id': mappedDictId, 'name': name});
+      existingUnitIdByKey[key] = newId;
+      final oldUnitId = (unit['id'] as num?)?.toInt() ?? newId;
+      unitIdMap[oldUnitId] = newId;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(dictionaryEnd, unitEnd, unitIdMap.length, units.length),
+        '正在匹配单元...',
+      );
+    }
+
+    if (units.isEmpty) {
+      _emitImportProgress(onProgress, unitEnd, '单元匹配完成');
+    }
+
+    final existingWordRows = await txn.query(
+      'custom_word',
+      columns: ['id', 'unit_id', 'word', 'meaning'],
+    );
+    final existingWordByKey = <String, Map<String, Object?>>{
+      for (final row in existingWordRows)
+        if (row['id'] is int && row['unit_id'] is int && row['word'] is String)
+          _customWordKey(
+            unitId: row['unit_id'] as int,
+            word: row['word'] as String,
+          ): Map<String, Object?>.from(row),
+    };
+    final insertRows = <Map<String, Object?>>[];
+    final updateRows = <Map<String, Object?>>[];
+
+    for (final word in customWords) {
+      final oldUnitId = (word['unit_id'] as num?)?.toInt();
+      if (oldUnitId == null) {
+        continue;
+      }
+      final mappedUnitId = unitIdMap[oldUnitId];
+      if (mappedUnitId == null) {
+        continue;
+      }
+
+      final rawWord = (word['word'] as String? ?? '').trim();
+      final rawMeaning = (word['meaning'] as String? ?? '').trim();
+      if (rawWord.isEmpty || rawMeaning.isEmpty) {
+        continue;
+      }
+
+      final key = _customWordKey(unitId: mappedUnitId, word: rawWord);
+      final existing = existingWordByKey[key];
+      if (existing == null) {
+        final insertedRow = <String, Object?>{
+          'unit_id': mappedUnitId,
+          'word': rawWord,
+          'meaning': rawMeaning,
+        };
+        insertRows.add(insertedRow);
+        existingWordByKey[key] = insertedRow;
+        continue;
+      }
+
+      if ((existing['meaning'] as String? ?? '') != rawMeaning) {
+        updateRows.add({
+          'id': existing['id'],
+          'word': rawWord,
+          'meaning': rawMeaning,
+        });
+        existing['meaning'] = rawMeaning;
+        existing['word'] = rawWord;
+      }
+    }
+
+    await _commitInsertChunked(
+      txn,
+      table: 'custom_word',
+      rows: insertRows,
+      onProgress: onProgress,
+      startProgress: unitEnd,
+      endProgress: insertEnd,
+      progressMessage: '正在写入新增单词...',
+    );
+    await _commitCustomWordUpdateChunked(
+      txn,
+      updateRows,
+      onProgress: onProgress,
+      startProgress: insertEnd,
+      endProgress: updateEnd,
+      progressMessage: '正在更新已有单词...',
+    );
+  }
+
+  Future<void> _commitInsertChunked(
+    Transaction txn, {
+    required String table,
+    required List<Map<String, Object?>> rows,
+    ConflictAlgorithm? conflictAlgorithm,
+    ImportProgressCallback? onProgress,
+    double startProgress = 0,
+    double endProgress = 1,
+    String progressMessage = '正在写入数据...',
+  }) async {
+    if (rows.isEmpty) {
+      _emitImportProgress(onProgress, endProgress, progressMessage);
+      return;
+    }
+
+    Batch batch = txn.batch();
+    var queued = 0;
+    var processed = 0;
+    _emitImportProgress(onProgress, startProgress, progressMessage);
+    for (final row in rows) {
+      batch.insert(
+        table,
+        row,
+        conflictAlgorithm: conflictAlgorithm,
+      );
+      queued++;
+      if (queued >= _batchChunkSize) {
+        await batch.commit(noResult: true);
+        processed += queued;
+        _emitImportProgress(
+          onProgress,
+          _sliceProgress(startProgress, endProgress, processed, rows.length),
+          progressMessage,
+        );
+        batch = txn.batch();
+        queued = 0;
+      }
+    }
+
+    if (queued > 0) {
+      await batch.commit(noResult: true);
+      processed += queued;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(startProgress, endProgress, processed, rows.length),
+        progressMessage,
+      );
+    }
+  }
+
+  Future<void> _commitCustomWordUpdateChunked(
+    Transaction txn,
+    List<Map<String, Object?>> rows, {
+    ImportProgressCallback? onProgress,
+    double startProgress = 0,
+    double endProgress = 1,
+    String progressMessage = '正在更新数据...',
+  }) async {
+    if (rows.isEmpty) {
+      _emitImportProgress(onProgress, endProgress, progressMessage);
+      return;
+    }
+
+    Batch batch = txn.batch();
+    var queued = 0;
+    var processed = 0;
+    _emitImportProgress(onProgress, startProgress, progressMessage);
+    for (final row in rows) {
+      batch.update(
+        'custom_word',
+        {
+          'word': row['word'],
+          'meaning': row['meaning'],
+        },
+        where: 'id = ?',
+        whereArgs: [row['id']],
+      );
+      queued++;
+      if (queued >= _batchChunkSize) {
+        await batch.commit(noResult: true);
+        processed += queued;
+        _emitImportProgress(
+          onProgress,
+          _sliceProgress(startProgress, endProgress, processed, rows.length),
+          progressMessage,
+        );
+        batch = txn.batch();
+        queued = 0;
+      }
+    }
+
+    if (queued > 0) {
+      await batch.commit(noResult: true);
+      processed += queued;
+      _emitImportProgress(
+        onProgress,
+        _sliceProgress(startProgress, endProgress, processed, rows.length),
+        progressMessage,
+      );
+    }
+  }
+
+  void _emitImportProgress(
+    ImportProgressCallback? onProgress,
+    double progress,
+    String message,
+  ) {
+    onProgress?.call(
+      ImportProgress(
+        progress: progress.clamp(0.0, 1.0),
+        message: message,
+      ),
+    );
+  }
+
+  double _sliceProgress(
+    double start,
+    double end,
+    int processed,
+    int total,
+  ) {
+    if (total <= 0) {
+      return end;
+    }
+    final ratio = (processed / total).clamp(0.0, 1.0);
+    return start + (end - start) * ratio;
+  }
+
+  double _lerpProgress(double start, double end, double ratio) {
+    return start + (end - start) * ratio.clamp(0.0, 1.0);
+  }
+
+  String _sanitizeImportedDictionaryName(Object? rawName) {
+    final name = (rawName as String? ?? '').trim();
+    return name.isEmpty ? 'Imported Dictionary' : name;
+  }
+
+  String _sanitizeImportedUnitName(Object? rawName) {
+    final name = (rawName as String? ?? '').trim();
+    return name.isEmpty ? 'Imported Unit' : name;
+  }
+
+  String _customUnitKey({required int dictId, required String name}) {
+    return '$dictId|$name';
+  }
+
+  String _customWordKey({required int unitId, required String word}) {
+    return '$unitId|${_normalizedWord(word)}';
   }
 
   Future<String?> _getMetaValue(String key) async {

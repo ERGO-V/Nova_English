@@ -25,6 +25,7 @@ class NovaEnglishApp extends StatelessWidget {
                 if (controller.isImporting)
                   _ImportBlockingOverlay(
                     message: controller.importStatusText ?? '正在导入数据...',
+                    progress: controller.importProgressValue,
                   ),
               ],
             );
@@ -37,13 +38,20 @@ class NovaEnglishApp extends StatelessWidget {
 }
 
 class _ImportBlockingOverlay extends StatelessWidget {
-  const _ImportBlockingOverlay({required this.message});
+  const _ImportBlockingOverlay({
+    required this.message,
+    required this.progress,
+  });
 
   final String message;
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final percent = progress == null
+        ? null
+        : '${(progress!.clamp(0.0, 1.0) * 100).round()}%';
 
     return Stack(
       children: [
@@ -53,8 +61,8 @@ class _ImportBlockingOverlay extends StatelessWidget {
         ),
         Center(
           child: Container(
-            width: 220,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+            width: 280,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
               borderRadius: BorderRadius.circular(24),
@@ -68,24 +76,51 @@ class _ImportBlockingOverlay extends StatelessWidget {
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(strokeWidth: 3.2),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.8),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '正在导入',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (percent != null)
+                      Text(
+                        percent,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 Text(
                   message,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 10,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
-                  '请稍候，导入完成前暂时无法操作',
-                  textAlign: TextAlign.center,
+                  '导入完成前暂时无法操作，请稍候。',
                   style: theme.textTheme.bodyMedium,
                 ),
               ],

@@ -21,6 +21,7 @@ class NovaController extends ChangeNotifier {
   bool isImporting = false;
   String? initError;
   String? importStatusText;
+  double? importProgressValue;
   int tabIndex = 0;
   bool prefersLightTheme = false;
   BuiltinSource selectedSource = BuiltinSource.cet4;
@@ -156,8 +157,11 @@ class NovaController extends ChangeNotifier {
     }
     return _runImportTask(
       message: '正在导入完整备份...',
-      task: () async {
-        await repository.importFullBackupJsonString(raw);
+      task: (onProgress) async {
+        await repository.importFullBackupJsonString(raw, onProgress: onProgress);
+        _handleImportProgress(
+          const ImportProgress(progress: 0.98, message: '正在刷新应用数据...'),
+        );
         await refreshAll();
       },
       successMessage: '完整备份已导入，内置学习进度和自定义词典数据已合并。',
@@ -183,8 +187,14 @@ class NovaController extends ChangeNotifier {
     }
     return _runImportTask(
       message: '正在导入自定义词典...',
-      task: () async {
-        await repository.importCustomDictionaryJsonString(raw);
+      task: (onProgress) async {
+        await repository.importCustomDictionaryJsonString(
+          raw,
+          onProgress: onProgress,
+        );
+        _handleImportProgress(
+          const ImportProgress(progress: 0.98, message: '正在刷新应用数据...'),
+        );
         await refreshAll();
       },
       successMessage: '自定义词典已导入，当前学习进度保持不变。',
@@ -197,23 +207,34 @@ class NovaController extends ChangeNotifier {
 
   Future<String?> _runImportTask({
     required String message,
-    required Future<void> Function() task,
+    required Future<void> Function(ImportProgressCallback onProgress) task,
     required String successMessage,
   }) async {
     isImporting = true;
     importStatusText = message;
+    importProgressValue = 0;
     notifyListeners();
 
     try {
-      await task();
+      await task(_handleImportProgress);
+      _handleImportProgress(
+        const ImportProgress(progress: 1.0, message: '导入完成'),
+      );
       return successMessage;
     } catch (error) {
       return '导入失败：$error';
     } finally {
       isImporting = false;
       importStatusText = null;
+      importProgressValue = null;
       notifyListeners();
     }
+  }
+
+  void _handleImportProgress(ImportProgress update) {
+    importStatusText = update.message;
+    importProgressValue = update.progress.clamp(0.0, 1.0);
+    notifyListeners();
   }
 
   String _guessMimeType(String fileName) {
