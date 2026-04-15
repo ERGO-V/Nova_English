@@ -18,7 +18,9 @@ class NovaController extends ChangeNotifier {
 
   bool isReady = false;
   bool isBusy = false;
+  bool isImporting = false;
   String? initError;
+  String? importStatusText;
   int tabIndex = 0;
   bool prefersLightTheme = false;
   BuiltinSource selectedSource = BuiltinSource.cet4;
@@ -145,17 +147,21 @@ class NovaController extends ChangeNotifier {
   }
 
   Future<String?> importFullBackup() async {
+    if (isImporting) {
+      return importStatusText ?? '正在导入数据，请稍候。';
+    }
     final raw = await _transferService.pickJsonText();
     if (raw == null) {
       return null;
     }
-    try {
-      await repository.importFullBackupJsonString(raw);
-      await refreshAll();
-      return '完整备份已导入，内置学习进度和自定义词典数据已按备份内容合并。';
-    } catch (error) {
-      return '导入失败：$error';
-    }
+    return _runImportTask(
+      message: '正在导入完整备份...',
+      task: () async {
+        await repository.importFullBackupJsonString(raw);
+        await refreshAll();
+      },
+      successMessage: '完整备份已导入，内置学习进度和自定义词典数据已合并。',
+    );
   }
 
   Future<String> exportCustomDictionaryBundle() async {
@@ -168,22 +174,47 @@ class NovaController extends ChangeNotifier {
   }
 
   Future<String?> importCustomDictionaryBundle() async {
+    if (isImporting) {
+      return importStatusText ?? '正在导入数据，请稍候。';
+    }
     final raw = await _transferService.pickJsonText();
     if (raw == null) {
       return null;
     }
-    try {
-      await repository.importCustomDictionaryJsonString(raw);
-      await refreshAll();
-      return '自定义词典已导入，当前学习进度保持不变。';
-    } catch (error) {
-      return '导入失败：$error';
-    }
+    return _runImportTask(
+      message: '正在导入自定义词典...',
+      task: () async {
+        await repository.importCustomDictionaryJsonString(raw);
+        await refreshAll();
+      },
+      successMessage: '自定义词典已导入，当前学习进度保持不变。',
+    );
   }
 
   Future<String> exportData() => exportFullBackup();
 
   Future<String?> importData() => importFullBackup();
+
+  Future<String?> _runImportTask({
+    required String message,
+    required Future<void> Function() task,
+    required String successMessage,
+  }) async {
+    isImporting = true;
+    importStatusText = message;
+    notifyListeners();
+
+    try {
+      await task();
+      return successMessage;
+    } catch (error) {
+      return '导入失败：$error';
+    } finally {
+      isImporting = false;
+      importStatusText = null;
+      notifyListeners();
+    }
+  }
 
   String _guessMimeType(String fileName) {
     final lower = fileName.toLowerCase();

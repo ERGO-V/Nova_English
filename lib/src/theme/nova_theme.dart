@@ -107,11 +107,16 @@ ThemeData buildNovaTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final palette = isDark ? NovaColors.dark : NovaColors.light;
   final seed = isDark ? const Color(0xFF12B4FF) : const Color(0xFF648BA6);
+  final actionColor = isDark ? const Color(0xFF12B4FF) : seed;
+  final actionOnColor = isDark ? const Color(0xFF04131D) : null;
   final baseScheme = ColorScheme.fromSeed(
     seedColor: seed,
     brightness: brightness,
   );
   final colorScheme = baseScheme.copyWith(
+    primary: actionColor,
+    secondary: actionColor,
+    onPrimary: actionOnColor ?? baseScheme.onPrimary,
     surface: palette.surface,
     surfaceContainerHighest: palette.surfaceRaised,
   );
@@ -151,6 +156,16 @@ ThemeData buildNovaTheme(Brightness brightness) {
       backgroundColor: palette.surface,
       indicatorColor: colorScheme.primary.withValues(alpha: 0.14),
       surfaceTintColor: Colors.transparent,
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: isDark ? actionColor : null,
+        foregroundColor: isDark ? actionOnColor : null,
+      ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: isDark ? actionColor : null,
+      foregroundColor: isDark ? actionOnColor : null,
     ),
     snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     dividerColor: colorScheme.outlineVariant.withValues(alpha: 0.55),

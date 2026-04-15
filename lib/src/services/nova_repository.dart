@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -14,10 +15,31 @@ class NovaRepository {
   static const String _prefersLightThemeKey = 'prefers_light_theme';
 
   Database? _database;
+  Future<void>? _initFuture;
+  Future<void> _writeQueue = Future.value();
 
   Database get db => _database!;
 
   Future<void> init() async {
+    if (_database != null) {
+      return;
+    }
+    if (_initFuture != null) {
+      return _initFuture!;
+    }
+
+    final future = _openDatabaseOnce();
+    _initFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_initFuture, future)) {
+        _initFuture = null;
+      }
+    }
+  }
+
+  Future<void> _openDatabaseOnce() async {
     if (_database != null) {
       return;
     }
@@ -31,6 +53,7 @@ class NovaRepository {
       version: _databaseVersion,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
+        await database.execute('PRAGMA busy_timeout = 5000');
       },
       onCreate: (database, version) async {
         await _createTables(database);
@@ -64,6 +87,20 @@ class NovaRepository {
     );
 
     await _ensureSeedData();
+  }
+
+  Future<T> _runSerializedWrite<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _writeQueue = _writeQueue
+        .catchError((Object _) {})
+        .then((_) async {
+          try {
+            completer.complete(await action());
+          } catch (error, stackTrace) {
+            completer.completeError(error, stackTrace);
+          }
+        });
+    return completer.future;
   }
 
   Future<void> _createTables(Database database) async {
@@ -328,10 +365,12 @@ class NovaRepository {
   }
 
   Future<void> saveProfile(UserProfile profile) async {
-    await db.insert('user_profile', {
-      'id': 1,
-      ...profile.toMap(),
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _runSerializedWrite(
+      () => db.insert('user_profile', {
+        'id': 1,
+        ...profile.toMap(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace),
+    );
   }
 
   Future<bool> fetchPrefersLightTheme() async {
@@ -340,7 +379,9 @@ class NovaRepository {
   }
 
   Future<void> savePrefersLightTheme(bool value) async {
-    await _setMetaValue(db, _prefersLightThemeKey, value ? '1' : '0');
+    await _runSerializedWrite(
+      () => _setMetaValue(db, _prefersLightThemeKey, value ? '1' : '0'),
+    );
   }
 
   Future<BuiltinStats> fetchBuiltinStats(BuiltinSource source) async {
@@ -510,25 +551,29 @@ class NovaRepository {
       };
     }
 
-    await db.insert(
-      'learning_progress',
-      update,
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await _runSerializedWrite(
+      () => db.insert(
+        'learning_progress',
+        update,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      ),
     );
   }
 
   Future<void> applyCustomResult(StudyEntry entry, bool remembered) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final currentErrors = entry.progress.errorCount;
-    await db.insert('learning_progress', {
-      'word_id': entry.id,
-      'word_type': WordType.custom.key,
-      'error_count': remembered ? currentErrors : currentErrors + 1,
-      'last_review_time': now,
-      'next_review_time': 0,
-      'consecutive_correct': remembered ? 1 : 0,
-      'is_removed': 0,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await _runSerializedWrite(
+      () => db.insert('learning_progress', {
+        'word_id': entry.id,
+        'word_type': WordType.custom.key,
+        'error_count': remembered ? currentErrors : currentErrors + 1,
+        'last_review_time': now,
+        'next_review_time': 0,
+        'consecutive_correct': remembered ? 1 : 0,
+        'is_removed': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace),
+    );
   }
 
   Future<List<CustomDictionarySummary>> fetchCustomDictionaries() async {
@@ -558,11 +603,15 @@ class NovaRepository {
   }
 
   Future<void> addCustomDictionary(String name) async {
-    await db.insert('custom_dict', {'name': name.trim()});
+    await _runSerializedWrite(
+      () => db.insert('custom_dict', {'name': name.trim()}),
+    );
   }
 
   Future<void> deleteCustomDictionary(int id) async {
-    await db.delete('custom_dict', where: 'id = ?', whereArgs: [id]);
+    await _runSerializedWrite(
+      () => db.delete('custom_dict', where: 'id = ?', whereArgs: [id]),
+    );
   }
 
   Future<List<CustomUnitSummary>> fetchUnits(int dictionaryId) async {
@@ -610,11 +659,15 @@ class NovaRepository {
     required int dictionaryId,
     required String name,
   }) async {
-    await db.insert('unit', {'dict_id': dictionaryId, 'name': name.trim()});
+    await _runSerializedWrite(
+      () => db.insert('unit', {'dict_id': dictionaryId, 'name': name.trim()}),
+    );
   }
 
   Future<void> deleteUnit(int unitId) async {
-    await db.delete('unit', where: 'id = ?', whereArgs: [unitId]);
+    await _runSerializedWrite(
+      () => db.delete('unit', where: 'id = ?', whereArgs: [unitId]),
+    );
   }
 
   Future<List<CustomWordDraft>> fetchUnitWords(int unitId) async {
@@ -639,37 +692,39 @@ class NovaRepository {
     required int unitId,
     required List<CustomWordDraft> words,
   }) async {
-    await db.transaction((txn) async {
-      final existingRows = await txn.query(
-        'custom_word',
-        columns: ['id'],
-        where: 'unit_id = ?',
-        whereArgs: [unitId],
-      );
-      final existingIds = existingRows.map((row) => row['id'] as int).toList();
-
-      if (existingIds.isNotEmpty) {
-        final placeholders = List.filled(existingIds.length, '?').join(',');
-        await txn.delete(
-          'learning_progress',
-          where: 'word_type = ? AND word_id IN ($placeholders)',
-          whereArgs: [WordType.custom.key, ...existingIds],
+    await _runSerializedWrite(() async {
+      await db.transaction((txn) async {
+        final existingRows = await txn.query(
+          'custom_word',
+          columns: ['id'],
+          where: 'unit_id = ?',
+          whereArgs: [unitId],
         );
-      }
+        final existingIds = existingRows.map((row) => row['id'] as int).toList();
 
-      await txn.delete(
-        'custom_word',
-        where: 'unit_id = ?',
-        whereArgs: [unitId],
-      );
+        if (existingIds.isNotEmpty) {
+          final placeholders = List.filled(existingIds.length, '?').join(',');
+          await txn.delete(
+            'learning_progress',
+            where: 'word_type = ? AND word_id IN ($placeholders)',
+            whereArgs: [WordType.custom.key, ...existingIds],
+          );
+        }
 
-      for (final word in words) {
-        await txn.insert('custom_word', {
-          'unit_id': unitId,
-          'word': word.word.trim(),
-          'meaning': word.meaning.trim(),
-        });
-      }
+        await txn.delete(
+          'custom_word',
+          where: 'unit_id = ?',
+          whereArgs: [unitId],
+        );
+
+        for (final word in words) {
+          await txn.insert('custom_word', {
+            'unit_id': unitId,
+            'word': word.word.trim(),
+            'meaning': word.meaning.trim(),
+          });
+        }
+      });
     });
   }
 
@@ -763,42 +818,44 @@ class NovaRepository {
     final units = _normalizeMapList(decoded['units']);
     final customWords = _normalizeMapList(decoded['custom_words']);
 
-    await db.transaction((txn) async {
-      if (profile != null) {
-        await txn.insert('user_profile', {
-          'id': 1,
-          ...profile,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-
-      final builtinIdMap = await _loadBuiltinIdMap(txn);
-      final builtinIdSet = builtinIdMap.values.toSet();
-      for (final progress in builtinProgress) {
-        final targetWordId = _resolveBuiltinWordId(
-          progress,
-          builtinIdMap,
-          builtinIdSet,
-        );
-        if (targetWordId == null) {
-          continue;
+    await _runSerializedWrite(() async {
+      await db.transaction((txn) async {
+        if (profile != null) {
+          await txn.insert('user_profile', {
+            'id': 1,
+            ...profile,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
-        await txn.insert('learning_progress', {
-          'word_id': targetWordId,
-          'word_type': progress['word_type'] ?? WordType.builtin.key,
-          'error_count': progress['error_count'] ?? 0,
-          'last_review_time': progress['last_review_time'] ?? 0,
-          'next_review_time': progress['next_review_time'] ?? 0,
-          'consecutive_correct': progress['consecutive_correct'] ?? 0,
-          'is_removed': progress['is_removed'] ?? 0,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
 
-      await _replaceCustomDictionaryBundle(
-        txn,
-        customDicts: customDicts,
-        units: units,
-        customWords: customWords,
-      );
+        final builtinIdMap = await _loadBuiltinIdMap(txn);
+        final builtinIdSet = builtinIdMap.values.toSet();
+        for (final progress in builtinProgress) {
+          final targetWordId = _resolveBuiltinWordId(
+            progress,
+            builtinIdMap,
+            builtinIdSet,
+          );
+          if (targetWordId == null) {
+            continue;
+          }
+          await txn.insert('learning_progress', {
+            'word_id': targetWordId,
+            'word_type': progress['word_type'] ?? WordType.builtin.key,
+            'error_count': progress['error_count'] ?? 0,
+            'last_review_time': progress['last_review_time'] ?? 0,
+            'next_review_time': progress['next_review_time'] ?? 0,
+            'consecutive_correct': progress['consecutive_correct'] ?? 0,
+            'is_removed': progress['is_removed'] ?? 0,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+
+        await _replaceCustomDictionaryBundle(
+          txn,
+          customDicts: customDicts,
+          units: units,
+          customWords: customWords,
+        );
+      });
     });
   }
 
@@ -808,13 +865,15 @@ class NovaRepository {
     final units = _normalizeMapList(decoded['units']);
     final customWords = _normalizeMapList(decoded['custom_words']);
 
-    await db.transaction((txn) async {
-      await _mergeCustomDictionaryBundle(
-        txn,
-        customDicts: customDicts,
-        units: units,
-        customWords: customWords,
-      );
+    await _runSerializedWrite(() async {
+      await db.transaction((txn) async {
+        await _mergeCustomDictionaryBundle(
+          txn,
+          customDicts: customDicts,
+          units: units,
+          customWords: customWords,
+        );
+      });
     });
   }
 
