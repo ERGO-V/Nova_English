@@ -66,7 +66,7 @@ class NovaRepository {
       version: _databaseVersion,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
-        await database.execute('PRAGMA busy_timeout = 5000');
+        await database.rawQuery('PRAGMA busy_timeout = 5000');
       },
       onCreate: (database, version) async {
         await _createTables(database);
