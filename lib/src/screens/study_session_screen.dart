@@ -145,17 +145,38 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  _current.word,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w900,
+                RepaintBoundary(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (Widget child, Animation<double> animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0.0, 0.15),
+                            end: Offset.zero,
+                          ).animate(CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          )),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Text(
+                      _current.word,
+                      key: ValueKey<String>(_current.word),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
                 AnimatedOpacity(
-                  opacity: _revealed ? 1 : 0,
-                  duration: const Duration(milliseconds: 180),
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _revealed ? 1.0 : 0.0,
                   child: Text(
                     _revealed ? _current.meaning : ' ',
                     textAlign: TextAlign.center,
@@ -167,39 +188,87 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        if (!_revealed) ...[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () => _select(true),
-              child: const Text('认识'),
+        Stack(
+          alignment: Alignment.bottomCenter,
+          children: [
+            IgnorePointer(
+              ignoring: _revealed,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: !_revealed ? 1.0 : 0.0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => _select(true),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('认识', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () => _select(false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: const Text('不认识', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => _select(false),
-              child: const Text('不认识'),
+            IgnorePointer(
+              ignoring: !_revealed,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _revealed ? 1.0 : 0.0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _confirm,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: _selectedRemembered == true
+                              ? Colors.green.shade600
+                              : Colors.red.shade500,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: Text(
+                          _selectedRemembered == true ? '确认认识' : '确认不认识',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () => _select(!(_selectedRemembered ?? false)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: Text(
+                          _selectedRemembered == true ? '记错了，改为不认识' : '改为认识',
+                          style: const TextStyle(fontSize: 15),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ] else ...[
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _confirm,
-              child: Text(_selectedRemembered == true ? '确认认识' : '确认不认识'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              onPressed: () => _select(!(_selectedRemembered ?? false)),
-              child: Text(_selectedRemembered == true ? '记错了，改为不认识' : '改为认识'),
-            ),
-          ),
-        ],
+          ],
+        ),
       ],
     );
   }
@@ -297,7 +366,7 @@ class _StudySessionScreenState extends State<StudySessionScreen> {
       }
 
       _revealed = false;
-      _selectedRemembered = null;
+      // 保留 _selectedRemembered 的旧值以确保在退出动画的 200ms 内按钮颜色不突变
       _finished = _queue.isEmpty;
     });
   }

@@ -1,7 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/entities.dart';
@@ -107,17 +108,62 @@ class NovaController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> pickAvatar(ImageSource source) async {
+  Future<void> pickAvatar(BuildContext context, ImageSource source) async {
     final file = await _imagePicker.pickImage(
       source: source,
       imageQuality: 82,
       maxWidth: 1024,
     );
+
     if (file == null) {
       return;
     }
-    final bytes = await file.readAsBytes();
-    final mime = _guessMimeType(file.name);
+
+    if (!context.mounted) return;
+
+    final croppedFile = await ImageCropper().cropImage(
+      sourcePath: file.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: '调整头像',
+          toolbarColor: const Color(0xFF121E2D),
+          toolbarWidgetColor: Colors.white,
+          initAspectRatio: CropAspectRatioPreset.square,
+          lockAspectRatio: true,
+          hideBottomControls: true,
+        ),
+        IOSUiSettings(
+          title: '调整头像',
+          doneButtonTitle: '确定',
+          cancelButtonTitle: '取消',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+        ),
+        WebUiSettings(
+          context: context,
+          presentStyle: WebPresentStyle.dialog,
+          size: const CropperSize(
+            width: 480,
+            height: 480,
+          ),
+          translations: const WebTranslations(
+            title: '调整头像',
+            cancelButton: '取消',
+            cropButton: '确定',
+            rotateLeftTooltip: '向左旋转',
+            rotateRightTooltip: '向右旋转',
+          ),
+        ),
+      ],
+    );
+
+    if (croppedFile == null) {
+      return;
+    }
+
+    final bytes = await croppedFile.readAsBytes();
+    final mime = _guessMimeType(croppedFile.path.isEmpty ? file.name : croppedFile.path);
     final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
     profile = profile.copyWith(avatarPath: dataUrl);
     await repository.saveProfile(profile);

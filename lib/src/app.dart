@@ -15,9 +15,11 @@ class NovaEnglishApp extends StatelessWidget {
         return MaterialApp(
           title: 'NovaEnglish',
           debugShowCheckedModeBanner: false,
-          theme: buildNovaTheme(Brightness.light),
-          darkTheme: buildNovaTheme(Brightness.dark),
+          theme: novaLightTheme,
+          darkTheme: novaDarkTheme,
           themeMode: controller.themeMode,
+          themeAnimationDuration: const Duration(milliseconds: 300),
+          themeAnimationCurve: Curves.easeInOutCubic,
           builder: (context, child) {
             return Stack(
               children: [

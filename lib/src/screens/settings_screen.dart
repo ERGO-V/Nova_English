@@ -47,11 +47,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               children: [
                 CircleAvatar(
-                  radius: 42,
+                  radius: 44,
                   backgroundImage: controller.avatarProvider(),
                   backgroundColor: palette.avatarBackground,
                   child: controller.avatarProvider() == null
-                      ? const Icon(Icons.person_outline, size: 36)
+                      ? const Icon(Icons.person_outline, size: 48)
                       : null,
                 ),
                 const SizedBox(height: 14),
@@ -62,13 +62,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     OutlinedButton.icon(
                       onPressed: () =>
-                          controller.pickAvatar(ImageSource.gallery),
+                          controller.pickAvatar(context, ImageSource.gallery),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: const Text('相册'),
                     ),
                     OutlinedButton.icon(
                       onPressed: () =>
-                          controller.pickAvatar(ImageSource.camera),
+                          controller.pickAvatar(context, ImageSource.camera),
                       icon: const Icon(Icons.photo_camera_outlined),
                       label: const Text('相机'),
                     ),

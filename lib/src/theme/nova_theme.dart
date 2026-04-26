@@ -103,6 +103,9 @@ class NovaColors extends ThemeExtension<NovaColors> {
   }
 }
 
+final ThemeData novaLightTheme = buildNovaTheme(Brightness.light);
+final ThemeData novaDarkTheme = buildNovaTheme(Brightness.dark);
+
 ThemeData buildNovaTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final palette = isDark ? NovaColors.dark : NovaColors.light;

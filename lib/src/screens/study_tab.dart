@@ -20,11 +20,10 @@ class StudyTab extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('学习'),
-        leadingWidth: 80,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16, top: 6, bottom: 6),
+        leadingWidth: 64,
+        leading: Center(
           child: InkWell(
-            borderRadius: BorderRadius.circular(40),
+            borderRadius: BorderRadius.circular(24),
             onTap: () async {
               await Navigator.of(
                 context,
@@ -34,10 +33,11 @@ class StudyTab extends StatelessWidget {
               }
             },
             child: CircleAvatar(
+              radius: 24,
               backgroundImage: controller.avatarProvider(),
               backgroundColor: palette.avatarBackground,
               child: controller.avatarProvider() == null
-                  ? const Icon(Icons.person_outline)
+                  ? const Icon(Icons.person_outline, size: 26)
                   : null,
             ),
           ),
@@ -74,7 +74,7 @@ class StudyTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hi, ${controller.profile.nickname}',
+                  '你好, ${controller.profile.nickname}',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
